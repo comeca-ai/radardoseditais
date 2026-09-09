@@ -2,6 +2,8 @@
 
 Leitura diária do Diário Oficial do Estado da Paraíba (A União).
 
+**Ao vivo:** https://radar-dos-editais.jhonata-emerick.workers.dev
+
 O produto (radar, login, alertas, conta) roda na aplicação web. Este repositório é o **Worker**: cron, probe das fontes e API JSON.
 
 ## O que o Worker faz
@@ -22,13 +24,11 @@ O produto (radar, login, alertas, conta) roda na aplicação web. Este repositó
 
 ## Publicar
 
-O GitHub Action (`Deploy Worker`) publica em todo push em `main`.
+Cada push em `main` dispara o Action **Deploy Worker**.
 
-Secrets do repositório (Settings → Secrets and variables → Actions):
+Secrets do repositório (Settings → Secrets and variables → Actions), para o Action continuar publicando sozinho:
 
-- `CLOUDFLARE_API_TOKEN` — token com permissão de Workers
-- `CLOUDFLARE_ACCOUNT_ID` — id da conta Cloudflare
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
 
-Sem esses secrets o Action chega no `wrangler deploy` e para: o código está certo, falta a conta.
-
-KV é opcional. Sem o binding, o cron ainda roda e as rotas respondem; só não persiste o último ingest.
+Não coloque o token no código. KV é opcional: sem o binding o cron e as rotas funcionam; só não persiste o último ingest.
