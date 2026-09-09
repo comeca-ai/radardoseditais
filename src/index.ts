@@ -1,5 +1,8 @@
-interface Env {
-  // Add D1, R2, or KV bindings here as the catalog grows.
+import { EDITAIS, FONTES } from "./catalog";
+import { doeUrlFor, probeDoe, probeDomJp } from "./ingest";
+
+export interface Env {
+  RADAR?: KVNamespace;
 }
 
 const headers = {
@@ -9,39 +12,32 @@ const headers = {
   "access-control-allow-headers": "content-type",
 };
 
-const editais = [
-  {
-    orgao: "ENAP — Concurso Nacional Unificado 2",
-    edital: "114/2025",
-    esfera: "Federal / Brasil",
-    banca: "FGV",
-    status: "identificado",
-  },
-  {
-    orgao: "SEPLAD / Secretaria de Educação do Pará",
-    edital: "001/2026",
-    esfera: "Estadual / PA",
-    banca: "FGV",
-    status: "identificado",
-  },
-  {
-    orgao: "Ministério Público do Espírito Santo",
-    edital: "01/2026",
-    esfera: "Estadual / ES",
-    banca: "FGV",
-    status: "identificado",
-  },
-  {
-    orgao: "Prefeitura de Foz do Iguaçu",
-    edital: "01.001/2026",
-    esfera: "Municipal / PR",
-    banca: "Fundação FAFIPA",
-    status: "identificado",
-  },
-];
+type IngestResult = {
+  at: string;
+  doeUrl: string;
+  doe: { ok: boolean; status: number; bytes: number | null };
+  domJp: { ok: boolean; status: number };
+};
+
+async function runIngest(env: Env): Promise<IngestResult> {
+  const doeUrl = doeUrlFor();
+  const [doe, domJp] = await Promise.all([probeDoe(doeUrl), probeDomJp()]);
+  const result: IngestResult = {
+    at: new Date().toISOString(),
+    doeUrl,
+    doe,
+    domJp,
+  };
+  await env.RADAR?.put("last-ingest", JSON.stringify(result));
+  return result;
+}
 
 export default {
-  async fetch(request: Request, _env: Env): Promise<Response> {
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(runIngest(env).then(() => undefined));
+  },
+
+  async fetch(request: Request, env: Env): Promise<Response> {
     if (request.method === "OPTIONS") return new Response(null, { headers });
     const url = new URL(request.url);
 
@@ -50,11 +46,41 @@ export default {
     }
 
     if (url.pathname === "/api/editais" && request.method === "GET") {
-      return Response.json({ data: editais, total: editais.length }, { headers });
+      const ingest = env.RADAR ? await env.RADAR.get("last-ingest", "json") : null;
+      return Response.json(
+        { data: EDITAIS, total: EDITAIS.length, ingest },
+        { headers },
+      );
+    }
+
+    if (url.pathname === "/api/fontes" && request.method === "GET") {
+      const ingest = (env.RADAR
+        ? await env.RADAR.get<IngestResult>("last-ingest", "json")
+        : null) as IngestResult | null;
+      const fontes = FONTES.map((f) => {
+        if (f.id === "DOE-PB" && ingest) {
+          return { ...f, lastProbe: ingest.doe, url: ingest.doeUrl, probedAt: ingest.at };
+        }
+        if (f.id === "DOM-JP" && ingest) {
+          return { ...f, lastProbe: ingest.domJp, probedAt: ingest.at };
+        }
+        return f;
+      });
+      return Response.json({ data: fontes, ingest }, { headers });
+    }
+
+    if (url.pathname === "/api/ingest" && request.method === "GET") {
+      const result = await runIngest(env);
+      return Response.json(result, { headers });
     }
 
     return Response.json(
-      { name: "Radar dos Editais", message: "Catálogo de editais públicos" },
+      {
+        name: "Radar dos Editais",
+        recorte: "DOE-PB · João Pessoa",
+        routes: ["/health", "/api/editais", "/api/fontes", "/api/ingest"],
+        cron: "0 9 * * 1-6 UTC",
+      },
       { headers },
     );
   },

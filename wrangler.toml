@@ -4,3 +4,12 @@ compatibility_date = "2026-09-09"
 
 [observability]
 enabled = true
+
+# 06:00 America/Recife (UTC-3) — segunda a sábado
+[triggers]
+crons = ["0 9 * * 1-6"]
+
+# Opcional: wrangler kv namespace create RADAR
+# [[kv_namespaces]]
+# binding = "RADAR"
+# id = "cole-o-id-aqui"
