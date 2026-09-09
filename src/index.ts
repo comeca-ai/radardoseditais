@@ -4,6 +4,7 @@ import page from "./page.html";
 
 export interface Env {
   RADAR?: KVNamespace;
+  ASSETS?: Fetcher;
 }
 
 const jsonHeaders = {
@@ -15,7 +16,11 @@ const jsonHeaders = {
 
 const htmlHeaders = {
   "content-type": "text/html; charset=utf-8",
-  "cache-control": "no-store",
+  "cache-control": "no-store, no-cache, must-revalidate, max-age=0",
+  pragma: "no-cache",
+  expires: "0",
+  "x-content-type-options": "nosniff",
+  "x-radar": "jornal",
 };
 
 type IngestResult = {
@@ -118,55 +123,47 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   const path = url.pathname;
   const method = request.method;
 
-  if (path === "/health") {
-    return json({ ok: true, service: "radar-dos-editais" });
+  if (path === "/health" && method === "GET") {
+    return json({ ok: true, service: "radar-dos-editais", app: "jornal" });
   }
 
   if (path === "/api/editais" && method === "GET") {
-    const ingest = env.RADAR ? await env.RADAR.get("last-ingest", "json") : null;
-    return json({ data: EDITAIS, total: EDITAIS.length, ingest });
+    return json({ data: EDITAIS, total: EDITAIS.length });
   }
 
   if (path === "/api/fontes" && method === "GET") {
-    const ingest = (env.RADAR
-      ? await env.RADAR.get<IngestResult>("last-ingest", "json")
-      : null) as IngestResult | null;
-    const fontes = FONTES.map((f) => {
-      if (f.id === "DOE-PB" && ingest) {
-        return { ...f, lastProbe: ingest.doe, url: ingest.doeUrl, probedAt: ingest.at };
-      }
-      if (f.id === "DOM-JP" && ingest) {
-        return { ...f, lastProbe: ingest.domJp, probedAt: ingest.at };
-      }
-      return f;
-    });
-    return json({ data: fontes, ingest });
+    const last = env.RADAR ? await env.RADAR.get("last-ingest", "json") : null;
+    return json({ data: FONTES, ingest: last });
   }
 
-  if (path === "/api/ingest" && method === "GET") {
-    return json(await runIngest(env));
+  if (path === "/api/ingest" && (method === "GET" || method === "POST")) {
+    const result = await runIngest(env);
+    return json(result);
   }
 
   if (path === "/api/me" && method === "GET") {
     const user = await sessionUser(request, env);
-    return json({ user: user ? publicUser(user) : null });
+    if (!user) return json({ user: null });
+    return json({ user: publicUser(user) });
   }
 
   if (path === "/api/auth/signup" && method === "POST") {
-    if (!env.RADAR) return json({ error: "Cadastro indisponível neste Worker." }, 503);
+    if (!env.RADAR) return json({ error: "KV não ligado." }, 500);
     const body = (await request.json().catch(() => ({}))) as {
       email?: string;
       password?: string;
       cidade?: string;
     };
-    const email = (body.email || "").trim().toLowerCase();
-    const password = body.password || "";
-    const cidade = body.cidade || "João Pessoa";
+    const email = String(body.email || "")
+      .trim()
+      .toLowerCase();
+    const password = String(body.password || "");
+    const cidade = String(body.cidade || "João Pessoa");
     if (!email.includes("@") || password.length < 8) {
-      return json({ error: "E-mail ou senha inválidos." }, 400);
+      return json({ error: "E-mail válido e senha com 8 caracteres." }, 400);
     }
     if (await getUser(env, email)) {
-      return json({ error: "Já existe uma conta com este e-mail." }, 409);
+      return json({ error: "Já existe conta com este e-mail." }, 409);
     }
     const salt = newId();
     const hash = await pbkdf2(password, salt);
@@ -174,19 +171,21 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     await env.RADAR.put(`user:${email}`, JSON.stringify(user));
     const sid = newId();
     await env.RADAR.put(`sess:${sid}`, email, { expirationTtl: 60 * 60 * 24 * 30 });
-    return json({ user: publicUser(user) }, 200, { "set-cookie": cookie(sid, 60 * 60 * 24 * 30) });
+    return json({ user: publicUser(user) }, 201, { "set-cookie": cookie(sid, 60 * 60 * 24 * 30) });
   }
 
   if (path === "/api/auth/login" && method === "POST") {
-    if (!env.RADAR) return json({ error: "Entrar indisponível neste Worker." }, 503);
+    if (!env.RADAR) return json({ error: "KV não ligado." }, 500);
     const body = (await request.json().catch(() => ({}))) as {
       email?: string;
       password?: string;
     };
-    const email = (body.email || "").trim().toLowerCase();
+    const email = String(body.email || "")
+      .trim()
+      .toLowerCase();
     const user = await getUser(env, email);
     if (!user) return json({ error: "E-mail ou senha errados." }, 401);
-    const hash = await pbkdf2(body.password || "", user.salt);
+    const hash = await pbkdf2(String(body.password || ""), user.salt);
     if (hash !== user.hash) return json({ error: "E-mail ou senha errados." }, 401);
     const sid = newId();
     await env.RADAR.put(`sess:${sid}`, email, { expirationTtl: 60 * 60 * 24 * 30 });
@@ -196,7 +195,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   if (path === "/api/auth/logout" && method === "POST") {
     const sid = readCookie(request, "radar_sess");
     if (sid && env.RADAR) await env.RADAR.delete(`sess:${sid}`);
-    return json({ ok: true }, 200, { "set-cookie": cookie("", 0) });
+    return json({ ok: true }, 200, { "set-cookie": cookie("deleted", 0) });
   }
 
   if (path === "/api/profile" && method === "POST") {
@@ -251,6 +250,10 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   return json({ error: "Rota não encontrada" }, 404);
 }
 
+function appHtml(): Response {
+  return new Response(page, { status: 200, headers: htmlHeaders });
+}
+
 export default {
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(runIngest(env).then(() => undefined));
@@ -259,9 +262,10 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (request.method === "OPTIONS") return new Response(null, { headers: jsonHeaders });
     const url = new URL(request.url);
-    if (url.pathname === "/health" || url.pathname.startsWith("/api/")) {
+    const path = url.pathname;
+    if (path === "/health" || path.startsWith("/api/")) {
       return handleApi(request, env, url);
     }
-    return new Response(page, { headers: htmlHeaders });
+    return appHtml();
   },
 };
