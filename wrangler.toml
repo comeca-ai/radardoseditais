@@ -11,7 +11,11 @@ enabled = true
 [triggers]
 crons = ["0 9 * * 1-6"]
 
-# Opcional: wrangler kv namespace create RADAR
-# [[kv_namespaces]]
-# binding = "RADAR"
-# id = "cole-o-id-aqui"
+[[kv_namespaces]]
+binding = "RADAR"
+id = "8417ad17e4d847e0937c64bcb03edea5"
+
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = true
