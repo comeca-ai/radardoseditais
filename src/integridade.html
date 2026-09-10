@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mesa de integridade — PoC SEBRAE/RO</title>
+  <meta name="description" content="PoC Fase 1: revisar alerta de contrato e decidir com humano." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0a0a0b; --fg: #f4f4f5; --card: #121214; --muted: #1a1a1e;
+      --mute: #a1a1aa; --subtle: #71717a; --border: #2a2a2e;
+      --btn: #c8ccd4; --ink: #0a0a0b; --bad: #b4534a; --warn: #b08948; --ok: #6b8f71;
+      --sans: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+      --serif: "Newsreader", Georgia, serif;
+      --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); }
+    button { font-family: inherit; cursor: pointer; }
+    .wrap { max-width: 1280px; margin: 0 auto; padding: 0 16px 48px; }
+    header.top { border-bottom: 1px solid var(--border); padding: 14px 0 10px; }
+    .row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .brand { font-family: var(--serif); font-size: 22px; margin: 0; }
+    .meta { color: var(--mute); font-size: 13px; }
+    nav.tabs { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+    nav.tabs button { background: transparent; border: 1px solid var(--border); color: var(--mute); padding: 6px 10px; border-radius: 2px; font-size: 13px; }
+    nav.tabs .on { background: var(--btn); color: var(--ink); border-color: var(--btn); }
+    .banner { margin: 12px 0 0; padding: 8px 10px; border: 1px solid var(--border); color: var(--mute); font-size: 12px; font-family: var(--mono); }
+    .mesa { display: grid; grid-template-columns: 340px 1fr; gap: 16px; margin-top: 16px; min-height: 70vh; }
+    @media (max-width: 820px) { .mesa { grid-template-columns: 1fr; } }
+    .lista { border: 1px solid var(--border); background: var(--card); }
+    .busca { width: 100%; background: var(--muted); color: var(--fg); border: 0; border-bottom: 1px solid var(--border); padding: 10px 12px; font-size: 14px; }
+    .item { display: block; width: 100%; text-align: left; background: transparent; border: 0; border-bottom: 1px solid var(--border); padding: 10px 12px; color: var(--fg); }
+    .item.open { background: #eceef2; color: var(--ink); }
+    .item .id { font-family: var(--mono); font-size: 11px; color: var(--subtle); }
+    .item .nome { display: block; font-size: 15px; }
+    .selos { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+    .selo { font-family: var(--mono); font-size: 10px; letter-spacing: .04em; text-transform: uppercase; border: 1px solid var(--border); padding: 2px 6px; }
+    .selo.alto, .selo.bloqueado, .selo.sancao { color: #f2d4d1; border-color: var(--bad); }
+    .selo.medio { color: #ead9b8; border-color: var(--warn); }
+    .selo.limpo { color: #c6ddc9; border-color: var(--ok); }
+    .ficha { border: 1px solid var(--border); background: var(--card); padding: 18px; }
+    .ficha h2 { font-family: var(--serif); font-size: 28px; margin: 8px 0 4px; }
+    .sub { color: var(--mute); margin: 0 0 14px; }
+    .fato { margin: 0 0 8px; font-size: 15px; }
+    .fonte { font-family: var(--mono); font-size: 11px; color: var(--subtle); margin: 14px 0; }
+    .alerta { border: 1px solid var(--border); padding: 10px 12px; margin-bottom: 8px; background: var(--muted); }
+    .acoes { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+    .go { background: var(--btn); color: var(--ink); border: 0; padding: 10px 14px; font-weight: 600; }
+    .no { background: transparent; color: var(--fg); border: 1px solid var(--border); padding: 10px 14px; font-weight: 600; }
+    textarea { width: 100%; min-height: 72px; margin-top: 10px; background: var(--muted); color: var(--fg); border: 1px solid var(--border); padding: 8px; font: 14px var(--sans); }
+    .trilha { margin-top: 18px; font-size: 13px; color: var(--mute); }
+    .painel { display: none; }
+    .painel.on { display: block; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 12px; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--mute); font-size: 12px; text-transform: uppercase; }
+    .n { font-family: var(--mono); font-size: 12px; color: var(--subtle); }
+    .st { font-family: var(--mono); font-size: 11px; text-transform: uppercase; }
+    .st.ok { color: #c6ddc9; } .st.sim { color: #ead9b8; } .st.off { color: var(--subtle); }
+    footer { margin-top: 28px; color: var(--subtle); font-size: 12px; }
+    .msg { margin-top: 10px; font-size: 14px; } .msg.ok { color: #c6ddc9; }
+    label.check { display: flex; gap: 8px; font-size: 14px; margin: 8px 0; color: var(--mute); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <div class="row">
+        <h1 class="brand">Mesa de integridade</h1>
+        <div class="meta">SEBRAE/RO · tenant isolado · PoC Fase 1</div>
+      </div>
+      <nav class="tabs">
+        <button class="on" data-tab="contratos" type="button">Contratos</button>
+        <button data-tab="terceiros" type="button">Terceiros</button>
+        <button data-tab="denuncias" type="button">Canal</button>
+        <button data-tab="seguranca" type="button">Segurança</button>
+      </nav>
+      <div class="banner">DEMO. Amostra da Fase 1 do TR. Não é base de produção do SEBRAE/RO. IA sugere. Humano decide.</div>
+    </header>
+    <section id="contratos" class="painel on"><div class="mesa"><aside class="lista"><input class="busca" id="busca" placeholder="Buscar contrato, CNPJ ou tipo" /><div id="lista"></div></aside><article class="ficha" id="ficha"></article></div></section>
+    <section id="terceiros" class="painel"><h2 class="brand" style="font-size:26px;margin:16px 0 8px">Screening de terceiros</h2><p class="sub">Portal da Transparência, OpenSanctions e bases federais. Fonte visível.</p><table><thead><tr><th>Fornecedor</th><th>CNPJ</th><th>Hit</th><th>Base</th><th>Score</th></tr></thead><tbody id="terc"></tbody></table></section>
+    <section id="denuncias" class="painel"><h2 class="brand" style="font-size:26px;margin:16px 0 8px">Canal de integridade</h2><p class="sub">Anonimato opcional. Lei 12.846. Humano na triagem.</p><form onsubmit="return enviarDenuncia(event)"><label class="check"><input type="checkbox" id="anon" checked /> Quero anonimato</label><textarea id="relato" required placeholder="O que aconteceu, quando, quem."></textarea><div class="acoes"><button class="go" type="submit">Registrar denúncia</button></div><p class="msg" id="den-msg"></p></form><ol class="trilha" id="den-lista"></ol></section>
+    <section id="seguranca" class="painel"><h2 class="brand" style="font-size:26px;margin:16px 0 8px">Itens de segurança, um a um</h2><p class="sub">TR SEBRAE/RO, 18/08/2026.</p><table><thead><tr><th class="n">#</th><th>Item</th><th>TR</th><th>PoC</th></tr></thead><tbody id="sec"></tbody></table></section>
+    <footer>Rota /integridade · Cloudflare Worker · DEMO. Hit público não é decisão.</footer>
+  </div>
+  <script>
+    const CONTRATOS = [
+      { id:"SGF-2026-0142", tipo:"SGF", nome:"Logística Norte Ltda", cnpj:"12.345.678/0001-90", selo:"alto", label:"risco alto", fatos:["Valor R$ 186 mil.","Sócio em lista PEP.","1 obrigação sem evidência."], alertas:[{t:"PEP no quadro",d:"Due diligence reforçada antes de pagamento."},{t:"Obrigação sem evidência",d:"Cláusula 8.2 sem anexo."}], fontes:"Transparência · OpenSanctions · ISO 37001 (DEMO)" },
+      { id:"SEBRAETEC-2026-0088", tipo:"Sebraetec", nome:"Oficina Clara Consultoria", cnpj:"23.456.789/0001-01", selo:"limpo", label:"limpo", fatos:["R$ 42 mil.","Sem hit nas três bases."], alertas:[{t:"Nenhum achado severo",d:"Sem efeito cadastral."}], fontes:"Três bases mínimas do TR (DEMO)" },
+      { id:"CONV-2026-0031", tipo:"Convênio", nome:"Associação Produtiva do Madeira", cnpj:"34.567.890/0001-12", selo:"medio", label:"obrigacao vencida", fatos:["R$ 95 mil.","Prestação com 18 dias de atraso."], alertas:[{t:"Prestação fora do prazo",d:"Pagamento não flui sem humano."}], fontes:"Cláusula do PDF · ISO 9001 (DEMO)" },
+      { id:"PAT-2026-0012", tipo:"Patrocínio", nome:"Circuito Porto Velho Eventos", cnpj:"45.678.901/0001-23", selo:"medio", label:"noticia adversa", fatos:["R$ 28 mil.","Notícia adversa 2024."], alertas:[{t:"Notícia adversa",d:"Não é sanção. Classificar antes de bloquear."}], fontes:"Clipping · espelho jurídico (DEMO)" },
+      { id:"DISP-2026-0204", tipo:"Dispensa", nome:"Peças e Serviços Madeira ME", cnpj:"56.789.012/0001-34", selo:"sancao", label:"sancao CEIS", fatos:["R$ 19 mil.","CNPJ no CEIS."], alertas:[{t:"Fornecedor sinalizado",d:"Webhook: pagamento bloqueado. Humano decide."}], fontes:"CEIS / Transparência (DEMO)" },
+      { id:"INEX-2026-0007", tipo:"Inexigibilidade", nome:"Instituto Técnico da Amazônia", cnpj:"67.890.123/0001-45", selo:"limpo", label:"limpo", fatos:["R$ 61 mil.","Justificativa presente."], alertas:[{t:"Documentação suficiente",d:"Sem efeito automático."}], fontes:"Dossiê · item 3.3 (DEMO)" },
+      { id:"SGF-2026-0180", tipo:"SGF", nome:"Rio Madeira Transportes", cnpj:"78.901.234/0001-56", selo:"bloqueado", label:"pagamento bloqueado", fatos:["Score 32→71 após sócio novo."], alertas:[{t:"Alteração de score",d:"Humano libera ou mantém bloqueio."}], fontes:"contract.updated · ISO 31000 (DEMO)" },
+      { id:"SEBRAETEC-2026-0110", tipo:"Sebraetec", nome:"Dados Abertos RO", cnpj:"89.012.345/0001-67", selo:"medio", label:"LGPD", fatos:["Falta consentimento de 3 titulares."], alertas:[{t:"Consentimento ausente",d:"Agente de privacidade não cadastra sozinho."}], fontes:"Lei 13.709/2018 (DEMO)" }
+    ];
+    const TERCEIROS = [["Logística Norte Ltda","12.345.678/0001-90","PEP","Base PEP","71"],["Oficina Clara Consultoria","23.456.789/0001-01","sem hit","3 bases mínimas","12"],["Peças e Serviços Madeira ME","56.789.012/0001-34","CEIS","Transparência / CEIS","88"],["Circuito Porto Velho Eventos","45.678.901/0001-23","notícia","Clipping","44"],["Rio Madeira Transportes","78.901.234/0001-56","quadro novo","QSA DEMO","71"]];
+    const SEGURANCA = [["Isolamento lógico por tenant","3.2","simulado","Só o path /integridade."],["API-first OpenAPI 3","3.2","parcial","/integridade/api/contratos"],["Processamento assíncrono","3.2","fora","PoC sincrônica."],["Token assimétrico + JWKS","3.2","fora","Sem login nesta Fase 1."],["TLS 1.2+","3.2","real","Worker Cloudflare."],["Criptografia em repouso 256 bits","3.2","parcial","KV/R2 cifram. PoC não grava dossiê."],["LGPD: segregação, anonimização, exportação","3.2 / 7","simulado","Canal aceita anonimato."],["Vedado treino de modelo público","3.2 / 8","real nesta PoC","Sem chamada a LLM."],["Aprovação humana obrigatória","3.1 / 8","real nesta PoC","Checkbox + clique."],["SSO e MFA","3.1","fora","Fora da Fase 1."],["Controle por papéis","3.1","simulado","Papel fixo: analista."],["Trilha de auditoria imutável","3.1","parcial","Sessão local."],["Painéis analíticos","3.1","fora","Fora da amostra."],["HMAC e credencial homog/prod","3.4","fora","Fase 2."],["Webhook outbound de eventos críticos","3.4","simulado","Só na ficha."],["Catálogo normativo ISO + NR + PNGPPD","3.3","simulado","Citado, texto não embarcado."],["Screening Transparência / OpenSanctions / sanções","3.3","simulado","Hits de amostra."],["Incidente em 48h","7","fora","Cláusula, não tela."],["Transferência internacional LGPD + Res. 19/2024","7","parcial","Edge Cloudflare."],["Backup PITR","3.6","fora","Fase 3."],["Exportação CSV/JSON/PDF ao término","3.6","fora","Cláusula."],["PWA + WCAG 2.1 AA","3.7","parcial","Contraste alto."],["Explicabilidade da IA","2 / 8","real nesta PoC","Regra e fonte na ficha."]];
+    const state = { open:0, filtro:"", trilhas:{} };
+    function seloClass(s){ return (s==="alto"||s==="bloqueado"||s==="sancao")?s:(s==="medio"?"medio":"limpo"); }
+    function lista(){ const q=state.filtro.toLowerCase(); document.getElementById("lista").innerHTML=CONTRATOS.map((c,i)=>{ if(q && !(c.id+c.nome+c.tipo+c.cnpj).toLowerCase().includes(q)) return ""; return `<button class="item ${i===state.open?"open":""}" data-i="${i}" type="button"><span class="id">${c.id}</span><span class="nome">${c.nome}</span><span class="selos"><span class="selo ${seloClass(c.selo)}">${c.label}</span><span class="selo">${c.tipo}</span></span></button>`; }).join(""); }
+    function ficha(){ const c=CONTRATOS[state.open]; const hist=state.trilhas[c.id]||[]; document.getElementById("ficha").innerHTML=`<span class="selo ${seloClass(c.selo)}">${c.label}</span> <span class="selo">${c.tipo}</span><h2>${c.nome}</h2><p class="sub">${c.id} · ${c.cnpj}</p>${c.fatos.map(f=>`<p class="fato">${f}</p>`).join("")}<p class="fonte">Fonte: ${c.fontes}</p>${c.alertas.map(a=>`<div class="alerta"><strong>${a.t}</strong><p>${a.d}</p></div>`).join("")}<label class="check"><input type="checkbox" id="hitl" /> Confirmo revisão humana desta saída</label><textarea id="nota" placeholder="Nota do analista. Obrigatória para devolver."></textarea><div class="acoes"><button class="go" type="button" id="aprovar">Aprovar alerta</button><button class="no" type="button" id="devolver">Devolver à área</button></div><p class="msg" id="dec-msg"></p><ol class="trilha">${hist.map(h=>`<li>${h}</li>`).join("")||"<li>Sem decisão ainda.</li>"}</ol>`; }
+    function decidir(tipo){ const c=CONTRATOS[state.open]; const hitl=document.getElementById("hitl").checked; const nota=document.getElementById("nota").value.trim(); const msg=document.getElementById("dec-msg"); if(!hitl){ msg.textContent="Marque a revisão humana."; return; } if(tipo==="devolver" && !nota){ msg.textContent="Devolver pede nota."; return; } state.trilhas[c.id]=[...(state.trilhas[c.id]||[]), new Date().toISOString().slice(0,16).replace("T"," ")+" · "+tipo+" · "+c.id+" · "+(nota||"sem nota")]; ficha(); document.getElementById("dec-msg").textContent=tipo==="aprovar"?"Decisão humana registrada. Nada foi ao financeiro.":"Devolvido."; document.getElementById("dec-msg").className="msg ok"; }
+    function terc(){ document.getElementById("terc").innerHTML=TERCEIROS.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td></tr>`).join(""); }
+    function sec(){ document.getElementById("sec").innerHTML=SEGURANCA.map((r,i)=>{ const cls=r[2].indexOf("real")===0?"ok":r[2]==="fora"?"off":"sim"; return `<tr><td class="n">${String(i+1).padStart(2,"0")}</td><td><strong>${r[0]}</strong><div class="fonte">${r[3]}</div></td><td>${r[1]}</td><td class="st ${cls}">${r[2]}</td></tr>`; }).join(""); }
+    function enviarDenuncia(ev){ ev.preventDefault(); const id="DEN-"+String(Date.now()).slice(-6); const li=document.createElement("li"); li.textContent=id+" · triagem · "+(document.getElementById("anon").checked?"anônima":"identificada"); document.getElementById("den-lista").prepend(li); document.getElementById("den-msg").textContent="Protocolo "+id+". IA não classifica sozinha."; document.getElementById("den-msg").className="msg ok"; document.getElementById("relato").value=""; return false; }
+    document.querySelectorAll("nav.tabs button").forEach(b=>b.addEventListener("click",()=>{ document.querySelectorAll("nav.tabs button").forEach(x=>x.classList.remove("on")); b.classList.add("on"); document.querySelectorAll(".painel").forEach(p=>p.classList.remove("on")); document.getElementById(b.dataset.tab).classList.add("on"); if(b.dataset.tab==="seguranca") history.replaceState(null,"","#seguranca"); }));
+    document.getElementById("lista").addEventListener("click",e=>{ const btn=e.target.closest(".item"); if(!btn) return; state.open=Number(btn.dataset.i); lista(); ficha(); });
+    document.getElementById("ficha").addEventListener("click",e=>{ if(e.target.id==="aprovar") decidir("aprovar"); if(e.target.id==="devolver") decidir("devolver"); });
+    document.getElementById("busca").addEventListener("input",e=>{ state.filtro=e.target.value; lista(); });
+    lista(); ficha(); terc(); sec();
+    if(location.hash==="#seguranca") document.querySelector('[data-tab="seguranca"]').click();
+  </script>
+</body>
+</html>
