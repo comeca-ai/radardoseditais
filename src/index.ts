@@ -1,6 +1,7 @@
 import { EDITAIS, FONTES } from "./catalog";
 import { doeUrlFor, probeDoe, probeDomJp } from "./ingest";
 import page from "./page.html";
+import integridade from "./integridade.html";
 
 export interface Env {
   RADAR?: KVNamespace;
@@ -21,6 +22,13 @@ const htmlHeaders = {
   expires: "0",
   "x-content-type-options": "nosniff",
   "x-radar": "jornal",
+};
+
+const integridadeHeaders = {
+  ...htmlHeaders,
+  "x-radar": "integridade",
+  "x-frame-options": "DENY",
+  "referrer-policy": "no-referrer",
 };
 
 type IngestResult = {
@@ -125,6 +133,14 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
   if (path === "/health" && method === "GET") {
     return json({ ok: true, service: "radar-dos-editais", app: "jornal" });
+  }
+
+  if (path === "/integridade/health" && method === "GET") {
+    return json({ ok: true, service: "pocsebrae", fase: "1", rota: "/integridade" });
+  }
+
+  if (path === "/integridade/api/contratos" && method === "GET") {
+    return json({ demo: true, total: 8, aviso: "Amostra Fase 1. Nao e base do SEBRAE/RO." });
   }
 
   if (path === "/api/editais" && method === "GET") {
@@ -254,6 +270,10 @@ function appHtml(): Response {
   return new Response(page, { status: 200, headers: htmlHeaders });
 }
 
+function integridadeHtml(): Response {
+  return new Response(integridade, { status: 200, headers: integridadeHeaders });
+}
+
 export default {
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(runIngest(env).then(() => undefined));
@@ -263,6 +283,12 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { headers: jsonHeaders });
     const url = new URL(request.url);
     const path = url.pathname;
+    if (path === "/integridade/health" || path.startsWith("/integridade/api/")) {
+      return handleApi(request, env, url);
+    }
+    if (path === "/integridade" || path.startsWith("/integridade/")) {
+      return integridadeHtml();
+    }
     if (path === "/health" || path.startsWith("/api/")) {
       return handleApi(request, env, url);
     }
